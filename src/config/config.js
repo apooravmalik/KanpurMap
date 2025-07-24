@@ -8,5 +8,5 @@ export const config = {
   tpappsApiUrl: import.meta.env.VITE_TPAPPS_API_URL,
 
   // URL for the dikshank API
-  dikshankApiUrl: import.meta.env.VITE_DIKSHANK_API_URL,
+  dikshankApiUrl: import.meta.env.VITE_DIKSHANK_PROXY_API_URL,
 };

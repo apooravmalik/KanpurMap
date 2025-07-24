@@ -6,7 +6,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as EsriLeaflet from 'esri-leaflet';
 import { fetchTpappsData } from '../utils/tpappsAPI';
-// import { fetchDikshankData } from '../utils/dikshankAPI';
+import { fetchDikshankData } from '../utils/dikshankAPI';
 import { config } from '../config/config.js';
 
 
@@ -110,71 +110,75 @@ const TpappsVehicleLayer = ({ onDataLoad, onError }) => {
   ) : null;
 };
 
-// --- UPDATED: Enhanced error handling for Dikshank component ---
-// const DikshankVehicleLayer = ({ onDataLoad, onError }) => {
-//   const [vehicles, setVehicles] = useState([]);
-//   const [isInitialized, setIsInitialized] = useState(false);
-//   const [hasError, setHasError] = useState(false);
+// --- Dikshank component (Proxy server call) ---
+const DikshankVehicleLayer = ({ onDataLoad, onError }) => {
+  const [vehicles, setVehicles] = useState([]);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [hasError, setHasError] = useState(false);
 
-//   useEffect(() => {
-//     let intervalId;
-//     let isMounted = true;
+  useEffect(() => {
+    let intervalId;
+    let isMounted = true;
 
-//     const fetchData = async () => {
-//       try {
-//         const normalizedData = await fetchDikshankData();
+    const fetchData = async () => {
+      try {
+        console.log('🚛 Fetching Dikshank data (via proxy)...');
+        const normalizedData = await fetchDikshankData();
         
-//         if (isMounted) {
-//           setVehicles(normalizedData);
-//           setHasError(false);
-//           setIsInitialized(true);
-//           onDataLoad({ source: 'dikshank', count: normalizedData.length, status: 'success' });
-//         }
-//       } catch (err) {
-//         console.error('Dikshank API Error:', err);
+        if (isMounted) {
+          console.log('✅ Dikshank data received:', normalizedData.length, 'vehicles');
+          setVehicles(normalizedData);
+          setHasError(false);
+          setIsInitialized(true);
+          onDataLoad({ source: 'dikshank', count: normalizedData.length, status: 'success' });
+        }
+      } catch (err) {
+        console.error('❌ Dikshank API Error:', err);
         
-//         if (isMounted) {
-//           setHasError(true);
-//           setIsInitialized(true);
+        if (isMounted) {
+          setHasError(true);
+          setIsInitialized(true);
           
-//           // Check if it's a CORS error and provide specific message
-//           const errorMessage = err.message.toLowerCase().includes('cors') || 
-//                              err.message.toLowerCase().includes('network') ||
-//                              err.name === 'TypeError' 
-//                              ? 'CORS/Network error - Backend team fixing this'
-//                              : err.message;
+          // Handle different types of errors
+          let errorMessage = err.message;
+          if (err.message.toLowerCase().includes('backend api failed')) {
+            errorMessage = 'Backend proxy server error - Check if backend is running';
+          } else if (err.message.toLowerCase().includes('network')) {
+            errorMessage = 'Network error - Backend server unreachable';
+          } else if (err.message.toLowerCase().includes('fetch')) {
+            errorMessage = 'Fetch error - Check backend server status';
+          }
           
-//           onError(`Dikshank API: ${errorMessage}`);
-//           onDataLoad({ source: 'dikshank', count: 0, status: 'error' });
-//         }
-//       }
-//     };
+          onError(`Dikshank API (Proxy): ${errorMessage}`);
+          onDataLoad({ source: 'dikshank', count: 0, status: 'error' });
+        }
+      }
+    };
 
-//     // Initial fetch
-//     fetchData();
+    // Initial fetch
+    fetchData();
 
-//     // Set up interval only if component is still mounted
-//     if (isMounted) {
-//       intervalId = setInterval(() => {
-//         if (isMounted) {
-//           fetchData();
-//         }
-//       }, 30000);
-//     }
+    // Set up interval for periodic updates
+    if (isMounted) {
+      intervalId = setInterval(() => {
+        if (isMounted) {
+          fetchData();
+        }
+      }, 30000); // 30 seconds
+    }
 
-//     return () => {
-//       isMounted = false;
-//       if (intervalId) {
-//         clearInterval(intervalId);
-//       }
-//     };
-//   }, []); // Remove dependencies to prevent re-initialization
+    return () => {
+      isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [onDataLoad, onError]);
 
-//   // Always render the component once initialized, but only show markers if no error
-//   return isInitialized ? (
-//     !hasError ? <VehicleMarkers vehicles={vehicles} /> : null
-//   ) : null;
-// };
+  return isInitialized ? (
+    !hasError ? <VehicleMarkers vehicles={vehicles} /> : null
+  ) : null;
+};
 
 
 // --- UPDATED: Main Kanpur Map component with better error display ---
@@ -273,7 +277,7 @@ export default function KanpurMap() {
           
           {/* These components will now handle their own errors gracefully */}
           <TpappsVehicleLayer onDataLoad={handleDataLoad} onError={handleError} />
-          {/* <DikshankVehicleLayer onDataLoad={handleDataLoad} onError={handleError} /> */}
+          <DikshankVehicleLayer onDataLoad={handleDataLoad} onError={handleError} />
 
         </MapContainer>
       </div>
