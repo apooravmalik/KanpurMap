@@ -101,7 +101,25 @@ const ArcGISLayerGroup = ({ url, layersToShow, options }) => {
 const VehicleMarkers = ({ vehicles }) => (
   <>
     {vehicles.map((vehicle) => {
-      const customIcon = L.icon({ iconUrl: vehicle.iconUrl, iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -16] });
+      const rotation = vehicle.details.Direction || 0;
+      const customIcon = L.divIcon({
+        className: 'custom-vehicle-marker',
+        html: `
+          <div style="
+            width: 32px; 
+            height: 32px; 
+            transform: rotate(${rotation}deg);
+            transform-origin: center;
+            background-image: url('${vehicle.iconUrl}');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-position: center;
+          "></div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -16]
+      });
       return (
         <Marker key={vehicle.id} position={vehicle.position} icon={customIcon}>
           <Popup className="vehicle-popup">
