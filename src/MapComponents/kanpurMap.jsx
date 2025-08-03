@@ -8,6 +8,8 @@ import * as EsriLeaflet from 'esri-leaflet';
 import { fetchTpappsData } from '../utils/tpappsAPI';
 import { fetchDikshankData } from '../utils/dikshankAPI';
 import { config } from '../config/config.js';
+import StatusFilter from './statusFilter';
+import { getStatusColor } from './statusConstants';
 
 // Layer definitions
 const LAYER_DEFINITIONS = [
@@ -98,46 +100,59 @@ const ArcGISLayerGroup = ({ url, layersToShow, options }) => {
   return null;
 };
 
-const VehicleMarkers = ({ vehicles }) => (
-  <>
-    {vehicles.map((vehicle) => {
-      const rotation = vehicle.details.Direction || 0;
-      const customIcon = L.divIcon({
-        className: 'custom-vehicle-marker',
-        html: `
-          <div style="
-            width: 32px; 
-            height: 32px; 
-            transform: rotate(${rotation}deg);
-            transform-origin: center;
-            background-image: url('${vehicle.iconUrl}');
-            background-size: cover;
-            background-repeat: no-repeat;
-            background-position: center;
-          "></div>
-        `,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
-        popupAnchor: [0, -16]
-      });
-      return (
-        <Marker key={vehicle.id} position={vehicle.position} icon={customIcon}>
-          <Popup className="vehicle-popup">
-            <div className="p-2 min-w-64">
-              <h3 className="font-bold text-lg mb-2">{vehicle.title}</h3>
-              <div className="space-y-1 text-sm">
-                {Object.entries(vehicle.details).map(([key, value]) => <p key={key}><strong>{key}:</strong> {value}</p>)}
+const VehicleMarkers = ({ vehicles, statusFilter = [] }) => {
+  // Filter vehicles based on status filter
+  const filteredVehicles = statusFilter.length === 0 ? vehicles : 
+    vehicles.filter(vehicle => statusFilter.includes(vehicle.status));
+    
+  return (
+    <>
+      {filteredVehicles.map((vehicle) => {
+        const rotation = vehicle.details.Direction || 0;
+        const customIcon = L.divIcon({
+          className: 'custom-vehicle-marker',
+          html: `
+            <div style="
+              width: 32px; 
+              height: 32px; 
+              transform: rotate(${rotation}deg);
+              transform-origin: center;
+              background-image: url('${vehicle.iconUrl}');
+              background-size: cover;
+              background-repeat: no-repeat;
+              background-position: center;
+            "></div>
+          `,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+          popupAnchor: [0, -16]
+        });
+        return (
+          <Marker key={vehicle.id} position={vehicle.position} icon={customIcon}>
+            <Popup className="vehicle-popup">
+              <div className="p-2 min-w-64">
+                <h3 className="font-bold text-lg mb-2">{vehicle.title}</h3>
+                <div className="space-y-1 text-sm">
+                  {Object.entries(vehicle.details).map(([key, value]) => (
+                    <p key={key}>
+                      <strong>{key}:</strong> 
+                      <span className={key === 'Status' ? `ml-1 px-2 py-1 rounded text-xs ${getStatusColor(value)}` : ''}>
+                        {value}
+                      </span>
+                    </p>
+                  ))}
+                </div>
               </div>
-            </div>
-          </Popup>
-        </Marker>
-      );
-    })}
-  </>
-);
+            </Popup>
+          </Marker>
+        );
+      })}
+    </>
+  );
+};
 
 // --- UPDATED: Enhanced error handling for Tpapps component ---
-const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled }) => {
+const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) => {
   const [vehicles, setVehicles] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -162,7 +177,7 @@ const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled }) => {
           setVehicles(normalizedData);
           setHasError(false);
           setIsInitialized(true);
-          onDataLoad({ source: 'tpapps', count: normalizedData.length, status: 'success' });
+          onDataLoad({ source: 'tpapps', count: normalizedData.length, status: 'success', vehicles: normalizedData });
         }
       } catch (err) {
         console.error('Tpapps API Error:', err);
@@ -198,12 +213,12 @@ const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled }) => {
 
   // Always render the component once initialized, but only show markers if enabled and no error
   return isInitialized ? (
-    (isEnabled && !hasError) ? <VehicleMarkers vehicles={vehicles} /> : null
+    (isEnabled && !hasError) ? <VehicleMarkers vehicles={vehicles} statusFilter={statusFilter} /> : null
   ) : null;
 };
 
 // --- Dikshank component (Proxy server call) ---
-const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled }) => {
+const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) => {
   const [vehicles, setVehicles] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -230,7 +245,7 @@ const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled }) => {
           setVehicles(normalizedData);
           setHasError(false);
           setIsInitialized(true);
-          onDataLoad({ source: 'dikshank', count: normalizedData.length, status: 'success' });
+          onDataLoad({ source: 'dikshank', count: normalizedData.length, status: 'success', vehicles: normalizedData });
         }
       } catch (err) {
         console.error('❌ Dikshank API Error:', err);
@@ -276,7 +291,7 @@ const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled }) => {
   }, [onDataLoad, onError, isEnabled]); // Add isEnabled to dependencies
 
   return isInitialized ? (
-    (isEnabled && !hasError) ? <VehicleMarkers vehicles={vehicles} /> : null
+    (isEnabled && !hasError) ? <VehicleMarkers vehicles={vehicles} statusFilter={statusFilter} /> : null
   ) : null;
 };
 
@@ -391,6 +406,9 @@ export default function KanpurMap() {
     tpapps: true,
     dikshank: true
   });
+  const [selectedStatuses, setSelectedStatuses] = useState([]); // Empty array means show all
+  const [allVehicles, setAllVehicles] = useState({ tpapps: [], dikshank: [] }); // Store all vehicles
+  const [vehicleStatusCounts, setVehicleStatusCounts] = useState({});
 
   useEffect(() => {
     console.log('Configuration loaded:', config);
@@ -398,6 +416,18 @@ export default function KanpurMap() {
     const layersToShow = layersFromParams ? layersFromParams.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id)) : [];
     setLayers(layersToShow.length > 0 ? layersToShow : [55, 57]);
   }, [layersFromParams]);
+
+  useEffect(() => {
+    const allVehiclesList = [...allVehicles.tpapps, ...allVehicles.dikshank];
+    const statusCounts = {};
+    
+    allVehiclesList.forEach(vehicle => {
+      const status = vehicle.status || 'Unknown';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    
+    setVehicleStatusCounts(statusCounts);
+  }, [allVehicles]);
 
   const handleLayerChange = (newLayers) => {
     setLayers(newLayers);
@@ -421,6 +451,14 @@ export default function KanpurMap() {
         lastUpdated: new Date().toLocaleTimeString()
       }
     }));
+
+    // Store vehicles for filtering
+    if (data.vehicles) {
+      setAllVehicles(prev => ({
+        ...prev,
+        [data.source]: data.vehicles
+      }));
+    }
   }, []);
 
   const handleError = useCallback((errorMsg) => {
@@ -485,6 +523,11 @@ export default function KanpurMap() {
         {/* Controls Row */}
         <div className="flex gap-4 items-center">
           <LayerControl selectedLayers={layers} onLayerChange={handleLayerChange} />
+          <StatusFilter 
+            selectedStatuses={selectedStatuses} 
+            onStatusChange={setSelectedStatuses}
+            vehicleStatusCounts={vehicleStatusCounts}
+          />
           <ApiControl apiStates={apiStates} onApiToggle={handleApiToggle} />
         </div>
         
@@ -509,8 +552,18 @@ export default function KanpurMap() {
           {layers.length > 0 && <ArcGISLayerGroup url={kanpurServiceUrl} layersToShow={layers} options={{ opacity: 0.8 }} />}
           
           {/* These components will now handle their own errors gracefully and can be toggled */}
-          <TpappsVehicleLayer onDataLoad={handleDataLoad} onError={handleError} isEnabled={apiStates.tpapps} />
-          <DikshankVehicleLayer onDataLoad={handleDataLoad} onError={handleError} isEnabled={apiStates.dikshank} />
+          <TpappsVehicleLayer 
+            onDataLoad={handleDataLoad} 
+            onError={handleError} 
+            isEnabled={apiStates.tpapps}
+            statusFilter={selectedStatuses}
+          />
+          <DikshankVehicleLayer 
+            onDataLoad={handleDataLoad} 
+            onError={handleError} 
+            isEnabled={apiStates.dikshank}
+            statusFilter={selectedStatuses}
+          />
 
         </MapContainer>
       </div>

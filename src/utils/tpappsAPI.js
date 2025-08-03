@@ -1,5 +1,22 @@
 import { config } from '../config/config';
 
+// Status normalization mapping for Tpapps
+const normalizeStatus = (status) => {
+  if (!status) return 'Unknown';
+  
+  const statusLower = status.toLowerCase();
+  
+  // Normalize to standard categories
+  if (statusLower === 'running') return 'Running';
+  if (statusLower === 'idle') return 'Idle';
+  if (statusLower === 'stop') return 'Stop';
+  if (statusLower === 'waiting') return 'Waiting';
+  if (statusLower === 'inactive' || statusLower === 'in-active') return 'Inactive';
+  
+  // Return original status if no mapping found
+  return status;
+};
+
 export const fetchTpappsData = async () => {
   try {
     // Use the URL from the config file
@@ -26,23 +43,29 @@ export const fetchTpappsData = async () => {
         if (!hasIcon) console.log("Missing icon for vehicle:", v.deviceId || v.imei);
         return hasCoords && hasIcon;
       })
-      .map(v => ({
-        id: `tpapps-${v.imei}`,
-        position: [parseFloat(v.lat), parseFloat(v.lng)],
-        iconUrl: v.equipmentIcon,
-        title: v.deviceId,
-        details: { 
-          Status: v.status, 
-          Equipment: v.equipmentTypeL, 
-          Speed: `${v.speed} km/h`, 
-          Ignition: v.ignitionStatus, 
-          Battery: `${v.batteryPercent}%`, 
-          Address: v.address || 'N/A', 
-          'Last Update': new Date(parseInt(v.validPacketTimeStamp) * 1000).toLocaleString() 
-        },
-      }));
+      .map(v => {
+        const normalizedStatus = normalizeStatus(v.status);
+        
+        return {
+          id: `tpapps-${v.imei}`,
+          position: [parseFloat(v.lat), parseFloat(v.lng)],
+          iconUrl: v.equipmentIcon,
+          title: v.deviceId,
+          status: normalizedStatus, // Add normalized status to main object
+          details: { 
+            Status: normalizedStatus, // Also keep in details for popup
+            Equipment: v.equipmentTypeL, 
+            Speed: `${v.speed} km/h`, 
+            Ignition: v.ignitionStatus, 
+            Battery: `${v.batteryPercent}%`, 
+            Address: v.address || 'N/A', 
+            'Last Update': new Date(parseInt(v.validPacketTimeStamp) * 1000).toLocaleString(),
+            Direction: v.heading || 0 // Add direction for consistency
+          },
+        };
+      });
     
-    console.log("Normalized vehicles:", normalized);
+    console.log("Normalized vehicles with status:", normalized);
     return normalized;
     
   } catch (err) {
