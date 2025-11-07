@@ -1,237 +1,175 @@
 /* eslint-disable no-unused-vars */
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, useMap, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import * as EsriLeaflet from 'esri-leaflet';
-import { fetchTpappsData } from '../utils/tpappsAPI';
-import { fetchDikshankData } from '../utils/dikshankAPI';
-import { mapServerAPI } from '../utils/mapServerAPI.js';
-import { config } from '../config/config.js';
-import StatusFilter from './statusFilter';
-import { getStatusColor } from './statusConstants';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { MapContainer, TileLayer, useMap, Marker, Popup } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import * as EsriLeaflet from "esri-leaflet";
+import { fetchTpappsData } from "../utils/tpappsAPI";
+import { fetchDikshankData } from "../utils/dikshankAPI";
+import { mapServerAPI } from "../utils/mapServerAPI.js";
+import { config } from "../config/config.js";
+import StatusFilter from "./statusFilter";
+import { getStatusColor } from "./statusConstants";
 
 // Layer definitions
 const LAYER_DEFINITIONS = [
-  { id: 0, name: 'ATCS' },
-  { id: 1, name: 'CCTV' },
-  { id: 2, name: 'EMS' },
-  { id: 3, name: 'ITMS' },
-  { id: 4, name: 'PA_ECB' },
-  { id: 5, name: 'SMART_PARKING' },
-  { id: 6, name: 'VMSB' },
-  { id: 7, name: 'WIFI' },
-  { id: 8, name: 'Airports' },
-  { id: 9, name: 'Ambulance Services' },
-  { id: 10, name: 'Apartments' },
-  { id: 11, name: 'ATMs' },
-  { id: 12, name: 'Auditoriums' },
-  { id: 13, name: 'Banks' },
-  { id: 14, name: 'Blood Banks' },
-  { id: 15, name: 'Burial Grounds' },
-  { id: 16, name: 'Bus Depots' },
-  { id: 17, name: 'Bus Stops' },
-  { id: 18, name: 'Commercial Complexes' },
-  { id: 19, name: 'Community Centres' },
-  { id: 20, name: 'Diagnostics Centre' },
-  { id: 21, name: 'Educational Facilities' },
-  { id: 22, name: 'Fire Stations' },
-  { id: 23, name: 'Govt Buildings' },
-  { id: 24, name: 'High School' },
-  { id: 25, name: 'Hospitals' },
-  { id: 26, name: 'Housing Societies' },
-  { id: 27, name: 'Landmark' },
-  { id: 28, name: 'Other Medical Services' },
-  { id: 29, name: 'Parking Areas' },
-  { id: 30, name: 'Permanent Commercial Markets' },
-  { id: 31, name: 'Petrol Pumps' },
-  { id: 32, name: 'Police Stations' },
-  { id: 33, name: 'Post Offices' },
-  { id: 34, name: 'Primary School' },
-  { id: 35, name: 'Railway Stations' },
-  { id: 36, name: 'Religious Places' },
-  { id: 37, name: 'Restaurant' },
-  { id: 38, name: 'Road Junction' },
-  { id: 39, name: 'Secondary School' },
-  { id: 40, name: 'Shopping Malls' },
-  { id: 41, name: 'Solid Waste Locations' },
-  { id: 42, name: 'Theaters' },
-  { id: 43, name: 'Travel And Tourism Facilities' },
-  { id: 44, name: 'Water' },
-  { id: 45, name: 'PublicToilets' },
-  { id: 46, name: 'Drain' },
-  { id: 47, name: 'Railway Network' },
-  { id: 48, name: 'Road Network' },
-  { id: 49, name: 'Locality' },
-  { id: 50, name: 'Building Footprint' },
-  { id: 51, name: 'Green Areas' },
-  { id: 52, name: 'Open Areas' },
-  { id: 53, name: 'Water Bodies' },
-  { id: 54, name: 'Ward Boundary' },
-  { id: 55, name: 'Zone Boundary' },
-  { id: 56, name: 'Pincode' },
-  { id: 57, name: 'Kanpur City Boundary' },
-  { id: 58, name: 'COVID 19' },
-  { id: 59, name: 'PWD Roads' },
-  { id: 60, name: 'Shelter Home' },
-  { id: 61, name: 'PlotBoundary' },
-  { id: 62, name: 'Trinetra_CCTV' }
+  { id: 0, name: "ATCS" },
+  { id: 1, name: "CCTV" },
+  { id: 2, name: "EMS" },
+  { id: 3, name: "ITMS" },
+  { id: 4, name: "PA_ECB" },
+  { id: 5, name: "SMART_PARKING" },
+  { id: 6, name: "VMSB" },
+  { id: 7, name: "WIFI" },
+  { id: 8, name: "Airports" },
+  { id: 9, name: "Ambulance Services" },
+  { id: 10, name: "Apartments" },
+  { id: 11, name: "ATMs" },
+  { id: 12, name: "Auditoriums" },
+  { id: 13, name: "Banks" },
+  { id: 14, name: "Blood Banks" },
+  { id: 15, name: "Burial Grounds" },
+  { id: 16, name: "Bus Depots" },
+  { id: 17, name: "Bus Stops" },
+  { id: 18, name: "Commercial Complexes" },
+  { id: 19, name: "Community Centres" },
+  { id: 20, name: "Diagnostics Centre" },
+  { id: 21, name: "Educational Facilities" },
+  { id: 22, name: "Fire Stations" },
+  { id: 23, name: "Govt Buildings" },
+  { id: 24, name: "High School" },
+  { id: 25, name: "Hospitals" },
+  { id: 26, name: "Housing Societies" },
+  { id: 27, name: "Landmark" },
+  { id: 28, name: "Other Medical Services" },
+  { id: 29, name: "Parking Areas" },
+  { id: 30, name: "Permanent Commercial Markets" },
+  { id: 31, name: "Petrol Pumps" },
+  { id: 32, name: "Police Stations" },
+  { id: 33, name: "Post Offices" },
+  { id: 34, name: "Primary School" },
+  { id: 35, name: "Railway Stations" },
+  { id: 36, name: "Religious Places" },
+  { id: 37, name: "Restaurant" },
+  { id: 38, name: "Road Junction" },
+  { id: 39, name: "Secondary School" },
+  { id: 40, name: "Shopping Malls" },
+  { id: 41, name: "Solid Waste Locations" },
+  { id: 42, name: "Theaters" },
+  { id: 43, name: "Travel And Tourism Facilities" },
+  { id: 44, name: "Water" },
+  { id: 45, name: "PublicToilets" },
+  { id: 46, name: "Drain" },
+  { id: 47, name: "Railway Network" },
+  { id: 48, name: "Road Network" },
+  { id: 49, name: "Locality" },
+  { id: 50, name: "Building Footprint" },
+  { id: 51, name: "Green Areas" },
+  { id: 52, name: "Open Areas" },
+  { id: 53, name: "Water Bodies" },
+  { id: 54, name: "Ward Boundary" },
+  { id: 55, name: "Zone Boundary" },
+  { id: 56, name: "Pincode" },
+  { id: 57, name: "Kanpur City Boundary" },
+  { id: 58, name: "COVID 19" },
+  { id: 59, name: "PWD Roads" },
+  { id: 60, name: "Shelter Home" },
+  { id: 61, name: "PlotBoundary" },
+  { id: 62, name: "Trinetra_CCTV" },
 ];
 
-// --- UPDATED: ArcGIS Layer Component with direct MapServer support ---
+// --- UPDATED: ArcGIS Layer Component (FIXED) ---
+// This version uses esri-leaflet, which correctly handles ArcGIS REST services.
 const ArcGISLayerGroup = ({ layersToShow, options = {} }) => {
   const map = useMap();
   const currentLayerRef = useRef(null);
-  const clickHandlerRef = useRef(null);
 
   useEffect(() => {
-    if (!map || !layersToShow || layersToShow.length === 0) {
+    // 1. Cleanup old layer first
+    if (currentLayerRef.current && map.hasLayer(currentLayerRef.current)) {
+      map.removeLayer(currentLayerRef.current);
+      currentLayerRef.current = null;
+    }
+
+    // 2. Don't do anything if there's no map or no layers
+    if (!map || !layersToShow || !layersToShow.length) {
       return;
     }
 
-    // Remove existing layer and click handler
-    if (currentLayerRef.current && map.hasLayer(currentLayerRef.current)) {
-      map.removeLayer(currentLayerRef.current);
-    }
-    if (clickHandlerRef.current) {
-      map.off('click', clickHandlerRef.current);
-    }
+    // --- FIX: Declare esriLayer here ---
+    let esriLayer;
 
-    const mapServerMode = config.mapServerMode || 'direct';
-    console.log('🗺️ MapServer Mode:', mapServerMode);
+    // 3. Define the proxy URL
+    const proxyUrl = `${config.API_BASE_URL}/api/arcgis`;
+
+    console.log(
+      `✅ Using EsriLeaflet.dynamicMapLayer with proxy URL: ${proxyUrl}`
+    );
 
     try {
-      let layer;
-      let identifyUrl;
+      // 4. Create the correct layer type
+      // --- FIX: Assign to esriLayer (remove 'const') ---
+      esriLayer = EsriLeaflet.dynamicMapLayer({
+        url: proxyUrl,
+        layers: layersToShow,
+        opacity: options.opacity || 0.8,
+        transparent: true,
+        f: "image",
+      });
 
-      if (mapServerMode === 'direct' && config.arcGisServiceUrl) {
-        // Direct mode - use ArcGIS service URL directly
-        console.log('✅ Using DIRECT MapServer URL:', config.arcGisServiceUrl);
-        
-        layer = L.tileLayer.wms(`${config.arcGisServiceUrl}/export`, {
-          layers: `show:${layersToShow.join(',')}`,
-          format: 'image/png',
-          transparent: true,
-          version: '1.1.1',
-          attribution: 'ArcGIS Data (Direct)',
-          opacity: options.opacity || 0.8,
-          tileSize: 512,
-          zoomOffset: -1,
-          ...options
-        });
+      // 5. Add to map and save in ref
+      esriLayer.addTo(map);
+      currentLayerRef.current = esriLayer;
 
-        identifyUrl = `${config.arcGisServiceUrl}/identify`;
-      } else {
-        // Proxy mode - use backend proxy
-        console.log('✅ Using PROXY MapServer via:', `${config.API_BASE_URL}/api/arcgis/export`);
-        
-        layer = L.tileLayer.wms(`${config.API_BASE_URL}/api/arcgis/export`, {
-          layers: layersToShow.join(','),
-          format: 'image/png',
-          transparent: true,
-          version: '1.1.1',
-          attribution: 'ArcGIS Data (Proxy)',
-          opacity: options.opacity || 0.8,
-          tileSize: 512,
-          zoomOffset: -1,
-          ...options
-        });
+      // 6. Use esri-leaflet's built-in click handler
+      esriLayer.on("click", (e) => {
+        const feature = e.feature;
+        if (feature) {
+          let popupContent = `<div class="arcgis-popup">`;
+          popupContent += `<h4>${feature.layerName}</h4>`;
 
-        identifyUrl = `${config.API_BASE_URL}/api/arcgis/identify`;
-      }
-
-      layer.addTo(map);
-      currentLayerRef.current = layer;
-
-      console.log('✅ ArcGIS layer added successfully');
-
-      // Add click handler for identification
-      const handleMapClick = async (e) => {
-        if (!identifyUrl) return;
-
-        try {
-          const mapSize = map.getSize();
-          const bounds = map.getBounds();
-          
-          const identifyParams = new URLSearchParams({
-            geometry: `${e.latlng.lng},${e.latlng.lat}`,
-            geometryType: 'esriGeometryPoint',
-            layers: `visible:${layersToShow.join(',')}`,
-            tolerance: '3',
-            mapExtent: `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`,
-            imageDisplay: `${mapSize.x},${mapSize.y},96`,
-            sr: '4326',
-            f: 'json'
-          });
-
-          const response = await fetch(`${identifyUrl}?${identifyParams.toString()}`);
-          
-          if (!response.ok) {
-            console.error('❌ Identify request failed:', response.status);
-            return;
-          }
-
-          const results = await response.json();
-          
-          if (results && results.results && results.results.length > 0) {
-            const feature = results.results[0];
-            const attributes = feature.attributes || {};
-            
-            let popupContent = `<div class="arcgis-popup">`;
-            if (feature.layerName) {
-              popupContent += `<h4>${feature.layerName}</h4>`;
+          Object.entries(feature.properties).forEach(([key, value]) => {
+            if (value && key !== "OBJECTID" && key !== "Shape") {
+              popupContent += `<p><strong>${key}:</strong> ${value}</p>`;
             }
-            
-            Object.entries(attributes).forEach(([key, value]) => {
-              if (value && key !== 'OBJECTID' && key !== 'Shape') {
-                popupContent += `<p><strong>${key}:</strong> ${value}</p>`;
-              }
-            });
-            popupContent += `</div>`;
+          });
+          popupContent += `</div>`;
 
-            L.popup()
-              .setLatLng(e.latlng)
-              .setContent(popupContent)
-              .openOn(map);
-          }
-        } catch (error) {
-          console.error('❌ Identify error:', error);
+          L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
         }
-      };
+      });
 
-      clickHandlerRef.current = handleMapClick;
-      map.on('click', handleMapClick);
-
+      console.log("✅ ArcGIS layer added successfully using esri-leaflet");
     } catch (error) {
-      console.error('❌ Error creating MapServer layer:', error);
+      console.error("❌ Error creating esri-leaflet layer:", error);
     }
 
-    // Cleanup function
+    // 7. Return a cleanup function
+    // --- FIX: This can now access the 'esriLayer' variable ---
     return () => {
-      if (clickHandlerRef.current) {
-        map.off('click', clickHandlerRef.current);
-      }
-      if (currentLayerRef.current && map.hasLayer(currentLayerRef.current)) {
-        map.removeLayer(currentLayerRef.current);
+      if (esriLayer && map.hasLayer(esriLayer)) {
+        map.removeLayer(esriLayer);
       }
     };
-  }, [map, layersToShow, options.opacity]);
+  }, [map, layersToShow, options.opacity]); // Correct dependency array
 
   return null;
 };
 
 const VehicleMarkers = ({ vehicles, statusFilter = [] }) => {
   // Filter vehicles based on status filter
-  const filteredVehicles = statusFilter.length === 0 ? vehicles : 
-    vehicles.filter(vehicle => statusFilter.includes(vehicle.status));
-    
+  const filteredVehicles =
+    statusFilter.length === 0
+      ? vehicles
+      : vehicles.filter((vehicle) => statusFilter.includes(vehicle.status));
+
   return (
     <>
       {filteredVehicles.map((vehicle) => {
         const rotation = vehicle.details.Direction || 0;
         const customIcon = L.divIcon({
-          className: 'custom-vehicle-marker',
+          className: "custom-vehicle-marker",
           html: `
             <div style="
               width: 32px; 
@@ -246,18 +184,30 @@ const VehicleMarkers = ({ vehicles, statusFilter = [] }) => {
           `,
           iconSize: [32, 32],
           iconAnchor: [16, 16],
-          popupAnchor: [0, -16]
+          popupAnchor: [0, -16],
         });
         return (
-          <Marker key={vehicle.id} position={vehicle.position} icon={customIcon}>
+          <Marker
+            key={vehicle.id}
+            position={vehicle.position}
+            icon={customIcon}
+          >
             <Popup className="vehicle-popup">
               <div className="p-2 min-w-64">
                 <h3 className="font-bold text-lg mb-2">{vehicle.title}</h3>
                 <div className="space-y-1 text-sm">
                   {Object.entries(vehicle.details).map(([key, value]) => (
                     <p key={key}>
-                      <strong>{key}:</strong> 
-                      <span className={key === 'Status' ? `ml-1 px-2 py-1 rounded text-xs ${getStatusColor(value)}` : ''}>
+                      <strong>{key}:</strong>
+                      <span
+                        className={
+                          key === "Status"
+                            ? `ml-1 px-2 py-1 rounded text-xs ${getStatusColor(
+                                value
+                              )}`
+                            : ""
+                        }
+                      >
                         {value}
                       </span>
                     </p>
@@ -272,7 +222,12 @@ const VehicleMarkers = ({ vehicles, statusFilter = [] }) => {
   );
 };
 
-const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) => {
+const TpappsVehicleLayer = ({
+  onDataLoad,
+  onError,
+  isEnabled,
+  statusFilter,
+}) => {
   const [vehicles, setVehicles] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -282,7 +237,7 @@ const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) =>
       setVehicles([]);
       setIsInitialized(true);
       setHasError(false);
-      onDataLoad({ source: 'tpapps', count: 0, status: 'disabled' });
+      onDataLoad({ source: "tpapps", count: 0, status: "disabled" });
       return;
     }
 
@@ -292,21 +247,26 @@ const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) =>
     const fetchData = async () => {
       try {
         const normalizedData = await fetchTpappsData();
-        
+
         if (isMounted) {
           setVehicles(normalizedData);
           setHasError(false);
           setIsInitialized(true);
-          onDataLoad({ source: 'tpapps', count: normalizedData.length, status: 'success', vehicles: normalizedData });
+          onDataLoad({
+            source: "tpapps",
+            count: normalizedData.length,
+            status: "success",
+            vehicles: normalizedData,
+          });
         }
       } catch (err) {
-        console.error('Tpapps API Error:', err);
-        
+        console.error("Tpapps API Error:", err);
+
         if (isMounted) {
           setHasError(true);
           setIsInitialized(true);
           onError(`Tpapps API: ${err.message}`);
-          onDataLoad({ source: 'tpapps', count: 0, status: 'error' });
+          onDataLoad({ source: "tpapps", count: 0, status: "error" });
         }
       }
     };
@@ -330,11 +290,18 @@ const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) =>
   }, [isEnabled, onDataLoad, onError]);
 
   return isInitialized ? (
-    (isEnabled && !hasError) ? <VehicleMarkers vehicles={vehicles} statusFilter={statusFilter} /> : null
+    isEnabled && !hasError ? (
+      <VehicleMarkers vehicles={vehicles} statusFilter={statusFilter} />
+    ) : null
   ) : null;
 };
 
-const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) => {
+const DikshankVehicleLayer = ({
+  onDataLoad,
+  onError,
+  isEnabled,
+  statusFilter,
+}) => {
   const [vehicles, setVehicles] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -344,7 +311,7 @@ const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) 
       setVehicles([]);
       setIsInitialized(true);
       setHasError(false);
-      onDataLoad({ source: 'dikshank', count: 0, status: 'disabled' });
+      onDataLoad({ source: "dikshank", count: 0, status: "disabled" });
       return;
     }
 
@@ -353,34 +320,44 @@ const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) 
 
     const fetchData = async () => {
       try {
-        console.log('🚛 Fetching Dikshank data (via proxy)...');
+        console.log("🚛 Fetching Dikshank data (via proxy)...");
         const normalizedData = await fetchDikshankData();
-        
+
         if (isMounted) {
-          console.log('✅ Dikshank data received:', normalizedData.length, 'vehicles');
+          console.log(
+            "✅ Dikshank data received:",
+            normalizedData.length,
+            "vehicles"
+          );
           setVehicles(normalizedData);
           setHasError(false);
           setIsInitialized(true);
-          onDataLoad({ source: 'dikshank', count: normalizedData.length, status: 'success', vehicles: normalizedData });
+          onDataLoad({
+            source: "dikshank",
+            count: normalizedData.length,
+            status: "success",
+            vehicles: normalizedData,
+          });
         }
       } catch (err) {
-        console.error('❌ Dikshank API Error:', err);
-        
+        console.error("❌ Dikshank API Error:", err);
+
         if (isMounted) {
           setHasError(true);
           setIsInitialized(true);
-          
+
           let errorMessage = err.message;
-          if (err.message.toLowerCase().includes('backend api failed')) {
-            errorMessage = 'Backend proxy server error - Check if backend is running';
-          } else if (err.message.toLowerCase().includes('network')) {
-            errorMessage = 'Network error - Backend server unreachable';
-          } else if (err.message.toLowerCase().includes('fetch')) {
-            errorMessage = 'Fetch error - Check backend server status';
+          if (err.message.toLowerCase().includes("backend api failed")) {
+            errorMessage =
+              "Backend proxy server error - Check if backend is running";
+          } else if (err.message.toLowerCase().includes("network")) {
+            errorMessage = "Network error - Backend server unreachable";
+          } else if (err.message.toLowerCase().includes("fetch")) {
+            errorMessage = "Fetch error - Check backend server status";
           }
-          
+
           onError(`Dikshank API (Proxy): ${errorMessage}`);
-          onDataLoad({ source: 'dikshank', count: 0, status: 'error' });
+          onDataLoad({ source: "dikshank", count: 0, status: "error" });
         }
       }
     };
@@ -404,7 +381,9 @@ const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) 
   }, [isEnabled, onDataLoad, onError]);
 
   return isInitialized ? (
-    (isEnabled && !hasError) ? <VehicleMarkers vehicles={vehicles} statusFilter={statusFilter} /> : null
+    isEnabled && !hasError ? (
+      <VehicleMarkers vehicles={vehicles} statusFilter={statusFilter} />
+    ) : null
   ) : null;
 };
 
@@ -414,7 +393,7 @@ const LayerControl = ({ selectedLayers, onLayerChange }) => {
 
   const handleLayerToggle = (layerId) => {
     const newLayers = selectedLayers.includes(layerId)
-      ? selectedLayers.filter(id => id !== layerId)
+      ? selectedLayers.filter((id) => id !== layerId)
       : [...selectedLayers, layerId];
     onLayerChange(newLayers);
   };
@@ -427,13 +406,25 @@ const LayerControl = ({ selectedLayers, onLayerChange }) => {
         style={{ zIndex: 390 }}
       >
         <span>Layers ({selectedLayers.length})</span>
-        <svg className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        <svg
+          className={`w-4 h-4 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 9l-7 7-7-7"
+          />
         </svg>
       </button>
-      
+
       {isOpen && (
-        <div 
+        <div
           className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-80 overflow-y-auto min-w-64"
           style={{ zIndex: 401 }}
         >
@@ -451,7 +442,7 @@ const LayerControl = ({ selectedLayers, onLayerChange }) => {
               Default (Zone + City Boundary)
             </button>
           </div>
-          
+
           {LAYER_DEFINITIONS.map((layer) => (
             <label
               key={layer.id}
@@ -478,27 +469,27 @@ const ApiControl = ({ apiStates, onApiToggle }) => {
   return (
     <div className="flex gap-2">
       <button
-        onClick={() => onApiToggle('tpapps')}
+        onClick={() => onApiToggle("tpapps")}
         className={`px-3 py-2 text-sm rounded border ${
-          apiStates.tpapps 
-            ? 'bg-green-100 border-green-300 text-green-700' 
-            : 'bg-red-100 border-red-300 text-red-700'
+          apiStates.tpapps
+            ? "bg-green-100 border-green-300 text-green-700"
+            : "bg-red-100 border-red-300 text-red-700"
         }`}
         style={{ zIndex: 390 }}
       >
-        Tpapps API {apiStates.tpapps ? 'ON' : 'OFF'}
+        Tpapps API {apiStates.tpapps ? "ON" : "OFF"}
       </button>
-      
+
       <button
-        onClick={() => onApiToggle('dikshank')}
+        onClick={() => onApiToggle("dikshank")}
         className={`px-3 py-2 text-sm rounded border ${
-          apiStates.dikshank 
-            ? 'bg-green-100 border-green-300 text-green-700' 
-            : 'bg-red-100 border-red-300 text-red-700'
+          apiStates.dikshank
+            ? "bg-green-100 border-green-300 text-green-700"
+            : "bg-red-100 border-red-300 text-red-700"
         }`}
         style={{ zIndex: 390 }}
       >
-        Dikshank API {apiStates.dikshank ? 'ON' : 'OFF'}
+        Dikshank API {apiStates.dikshank ? "ON" : "OFF"}
       </button>
     </div>
   );
@@ -509,113 +500,129 @@ export default function KanpurMap() {
   const { layers: layersFromParams } = useParams();
   const navigate = useNavigate();
   const kanpurPosition = [26.4499, 80.3319];
-  
+
   const [layers, setLayers] = useState([]);
   const [apiStatus, setApiStatus] = useState({});
   const [errors, setErrors] = useState([]);
   const [apiStates, setApiStates] = useState({
     tpapps: true,
-    dikshank: true
+    dikshank: true,
   });
   const [selectedStatuses, setSelectedStatuses] = useState([]);
   const [allVehicles, setAllVehicles] = useState({ tpapps: [], dikshank: [] });
   const [vehicleStatusCounts, setVehicleStatusCounts] = useState({});
 
   useEffect(() => {
-    console.log('🔧 Configuration loaded:');
-    console.log('  - MapServer Mode:', config.mapServerMode);
-    console.log('  - ArcGIS Service URL:', config.arcGisServiceUrl);
-    console.log('  - API Base URL:', config.API_BASE_URL);
+    console.log("🔧 Configuration loaded:");
+    console.log("  - MapServer Mode:", config.mapServerMode);
+    console.log("  - ArcGIS Service URL:", config.arcGisServiceUrl);
+    console.log("  - API Base URL:", config.API_BASE_URL);
 
-    const layersToShow = layersFromParams ? layersFromParams.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id)) : [];
+    const layersToShow = layersFromParams
+      ? layersFromParams
+          .split(",")
+          .map((id) => parseInt(id, 10))
+          .filter((id) => !isNaN(id))
+      : [];
     setLayers(layersToShow.length > 0 ? layersToShow : [55, 57]);
   }, [layersFromParams]);
 
   useEffect(() => {
     const allVehiclesList = [...allVehicles.tpapps, ...allVehicles.dikshank];
     const statusCounts = {};
-    
-    allVehiclesList.forEach(vehicle => {
-      const status = vehicle.status || 'Unknown';
+
+    allVehiclesList.forEach((vehicle) => {
+      const status = vehicle.status || "Unknown";
       statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
-    
+
     setVehicleStatusCounts(statusCounts);
   }, [allVehicles]);
 
   const handleLayerChange = (newLayers) => {
     setLayers(newLayers);
-    const layersParam = newLayers.length > 0 ? newLayers.join(',') : '55,57';
+    const layersParam = newLayers.length > 0 ? newLayers.join(",") : "55,57";
     navigate(`/${layersParam}`, { replace: true });
   };
 
   const handleApiToggle = (apiName) => {
-    setApiStates(prev => ({
+    setApiStates((prev) => ({
       ...prev,
-      [apiName]: !prev[apiName]
+      [apiName]: !prev[apiName],
     }));
   };
 
   const handleDataLoad = useCallback((data) => {
-    setApiStatus(prev => ({
+    setApiStatus((prev) => ({
       ...prev,
       [data.source]: {
         count: data.count,
         status: data.status,
-        lastUpdated: new Date().toLocaleTimeString()
-      }
+        lastUpdated: new Date().toLocaleTimeString(),
+      },
     }));
 
     if (data.vehicles) {
-      setAllVehicles(prev => ({
+      setAllVehicles((prev) => ({
         ...prev,
-        [data.source]: data.vehicles
+        [data.source]: data.vehicles,
       }));
     }
   }, []); // Empty dependency array - function doesn't depend on external values
 
   const handleError = useCallback((errorMsg) => {
-    setErrors(prev => {
-      const apiName = errorMsg.split(':')[0];
-      const filteredErrors = prev.filter(e => !e.startsWith(apiName));
+    setErrors((prev) => {
+      const apiName = errorMsg.split(":")[0];
+      const filteredErrors = prev.filter((e) => !e.startsWith(apiName));
       return [...filteredErrors, errorMsg];
     });
   }, []); // Empty dependency array - function doesn't depend on external values
-  
+
   const totalVehicles = Object.values(apiStatus)
-    .filter(status => status.status === 'success')
+    .filter((status) => status.status === "success")
     .reduce((sum, status) => sum + status.count, 0);
 
   const successfulApis = Object.entries(apiStatus)
-    .filter(([_, status]) => status.status === 'success')
+    .filter(([_, status]) => status.status === "success")
     .map(([source, _]) => source);
 
   const failedApis = Object.entries(apiStatus)
-    .filter(([_, status]) => status.status === 'error')
+    .filter(([_, status]) => status.status === "error")
     .map(([source, _]) => source);
 
   const disabledApis = Object.entries(apiStatus)
-    .filter(([_, status]) => status.status === 'disabled')
+    .filter(([_, status]) => status.status === "disabled")
     .map(([source, _]) => source);
 
   return (
     <div className="flex flex-col h-screen">
-      <div className="bg-blue-700 text-white p-4 shadow-md" style={{ zIndex: 4000 }}>
+      <div
+        className="bg-blue-700 text-white p-4 shadow-md"
+        style={{ zIndex: 4000 }}
+      >
         <div className="flex justify-between items-center mb-3">
           <div>
-            <h1 className="text-2xl font-bold">Kanpur City Map - Vehicle Tracking</h1>
+            <h1 className="text-2xl font-bold">
+              Kanpur City Map - Vehicle Tracking
+            </h1>
             <p className="text-sm">
-              Displaying layers: {layers.length > 0 ? layers.map(id => {
-                const layer = LAYER_DEFINITIONS.find(l => l.id === id);
-                return layer ? `${layer.name} (${id})` : id;
-              }).join(', ') : 'None'}
+              Displaying layers:{" "}
+              {layers.length > 0
+                ? layers
+                    .map((id) => {
+                      const layer = LAYER_DEFINITIONS.find((l) => l.id === id);
+                      return layer ? `${layer.name} (${id})` : id;
+                    })
+                    .join(", ")
+                : "None"}
             </p>
             <p className="text-xs text-green-200">
-              MapServer Mode: {config.mapServerMode === 'direct' ? '🔗 Direct' : '🔄 Proxy'}
+              MapServer Mode:{" "}
+              {config.mapServerMode === "direct" ? "🔗 Direct" : "🔄 Proxy"}
             </p>
             {successfulApis.length > 0 && (
               <p className="text-xs text-green-200">
-                Active APIs: {successfulApis.join(', ')}
+                Active APIs: {successfulApis.join(", ")}
               </p>
             )}
           </div>
@@ -635,15 +642,18 @@ export default function KanpurMap() {
         </div>
 
         <div className="flex gap-4 items-center">
-          <LayerControl selectedLayers={layers} onLayerChange={handleLayerChange} />
-          <StatusFilter 
-            selectedStatuses={selectedStatuses} 
+          <LayerControl
+            selectedLayers={layers}
+            onLayerChange={handleLayerChange}
+          />
+          <StatusFilter
+            selectedStatuses={selectedStatuses}
             onStatusChange={setSelectedStatuses}
             vehicleStatusCounts={vehicleStatusCounts}
           />
           <ApiControl apiStates={apiStates} onApiToggle={handleApiToggle} />
         </div>
-        
+
         {errors.length > 0 && (
           <div className="mt-2 p-2 bg-yellow-400 text-black rounded text-sm">
             <div className="font-medium mb-1">API Status:</div>
@@ -658,21 +668,33 @@ export default function KanpurMap() {
           </div>
         )}
       </div>
-      
+
       <div className="flex-1 relative">
-        <MapContainer center={kanpurPosition} zoom={12} className="h-full w-full">
-          <TileLayer attribution='&copy; OpenStreetMap contributors & Esri' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          {layers.length > 0 && <ArcGISLayerGroup layersToShow={layers} options={{ opacity: 0.8 }} />}
-          
-          <TpappsVehicleLayer 
-            onDataLoad={handleDataLoad} 
-            onError={handleError} 
+        <MapContainer
+          center={kanpurPosition}
+          zoom={12}
+          className="h-full w-full"
+        >
+          <TileLayer
+            attribution="&copy; OpenStreetMap contributors & Esri"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          {layers.length > 0 && (
+            <ArcGISLayerGroup
+              layersToShow={layers}
+              options={{ opacity: 0.8 }}
+            />
+          )}
+
+          <TpappsVehicleLayer
+            onDataLoad={handleDataLoad}
+            onError={handleError}
             isEnabled={apiStates.tpapps}
             statusFilter={selectedStatuses}
           />
-          <DikshankVehicleLayer 
-            onDataLoad={handleDataLoad} 
-            onError={handleError} 
+          <DikshankVehicleLayer
+            onDataLoad={handleDataLoad}
+            onError={handleError}
             isEnabled={apiStates.dikshank}
             statusFilter={selectedStatuses}
           />
