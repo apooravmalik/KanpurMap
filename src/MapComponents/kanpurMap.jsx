@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, useMap, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -79,99 +79,144 @@ const LAYER_DEFINITIONS = [
   { id: 62, name: 'Trinetra_CCTV' }
 ];
 
-// --- CHILD COMPONENTS (No changes here) ---
+// --- UPDATED: ArcGIS Layer Component with direct MapServer support ---
 const ArcGISLayerGroup = ({ layersToShow, options = {} }) => {
   const map = useMap();
-  const [currentLayer, setCurrentLayer] = useState(null);
+  const currentLayerRef = useRef(null);
+  const clickHandlerRef = useRef(null);
 
   useEffect(() => {
-    if (map && layersToShow && layersToShow.length > 0) {
-      // Remove existing layer
-      if (currentLayer && map.hasLayer(currentLayer)) {
-        map.removeLayer(currentLayer);
-      }
+    if (!map || !layersToShow || layersToShow.length === 0) {
+      return;
+    }
 
-      // Create custom tile layer that forces proxy usage
-      const createProxyLayer = () => {
-        return L.tileLayer.wms(`${config.API_BASE_URL}/api/arcgis/export`, {
-          layers: layersToShow.join(','),
+    // Remove existing layer and click handler
+    if (currentLayerRef.current && map.hasLayer(currentLayerRef.current)) {
+      map.removeLayer(currentLayerRef.current);
+    }
+    if (clickHandlerRef.current) {
+      map.off('click', clickHandlerRef.current);
+    }
+
+    const mapServerMode = config.mapServerMode || 'direct';
+    console.log('🗺️ MapServer Mode:', mapServerMode);
+
+    try {
+      let layer;
+      let identifyUrl;
+
+      if (mapServerMode === 'direct' && config.arcGisServiceUrl) {
+        // Direct mode - use ArcGIS service URL directly
+        console.log('✅ Using DIRECT MapServer URL:', config.arcGisServiceUrl);
+        
+        layer = L.tileLayer.wms(`${config.arcGisServiceUrl}/export`, {
+          layers: `show:${layersToShow.join(',')}`,
           format: 'image/png',
           transparent: true,
           version: '1.1.1',
-          attribution: 'ArcGIS Data via Proxy',
+          attribution: 'ArcGIS Data (Direct)',
           opacity: options.opacity || 0.8,
-          // Force the layer to use our proxy endpoint
           tileSize: 512,
           zoomOffset: -1,
           ...options
         });
+
+        identifyUrl = `${config.arcGisServiceUrl}/identify`;
+      } else {
+        // Proxy mode - use backend proxy
+        console.log('✅ Using PROXY MapServer via:', `${config.API_BASE_URL}/api/arcgis/export`);
+        
+        layer = L.tileLayer.wms(`${config.API_BASE_URL}/api/arcgis/export`, {
+          layers: layersToShow.join(','),
+          format: 'image/png',
+          transparent: true,
+          version: '1.1.1',
+          attribution: 'ArcGIS Data (Proxy)',
+          opacity: options.opacity || 0.8,
+          tileSize: 512,
+          zoomOffset: -1,
+          ...options
+        });
+
+        identifyUrl = `${config.API_BASE_URL}/api/arcgis/identify`;
+      }
+
+      layer.addTo(map);
+      currentLayerRef.current = layer;
+
+      console.log('✅ ArcGIS layer added successfully');
+
+      // Add click handler for identification
+      const handleMapClick = async (e) => {
+        if (!identifyUrl) return;
+
+        try {
+          const mapSize = map.getSize();
+          const bounds = map.getBounds();
+          
+          const identifyParams = new URLSearchParams({
+            geometry: `${e.latlng.lng},${e.latlng.lat}`,
+            geometryType: 'esriGeometryPoint',
+            layers: `visible:${layersToShow.join(',')}`,
+            tolerance: '3',
+            mapExtent: `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`,
+            imageDisplay: `${mapSize.x},${mapSize.y},96`,
+            sr: '4326',
+            f: 'json'
+          });
+
+          const response = await fetch(`${identifyUrl}?${identifyParams.toString()}`);
+          
+          if (!response.ok) {
+            console.error('❌ Identify request failed:', response.status);
+            return;
+          }
+
+          const results = await response.json();
+          
+          if (results && results.results && results.results.length > 0) {
+            const feature = results.results[0];
+            const attributes = feature.attributes || {};
+            
+            let popupContent = `<div class="arcgis-popup">`;
+            if (feature.layerName) {
+              popupContent += `<h4>${feature.layerName}</h4>`;
+            }
+            
+            Object.entries(attributes).forEach(([key, value]) => {
+              if (value && key !== 'OBJECTID' && key !== 'Shape') {
+                popupContent += `<p><strong>${key}:</strong> ${value}</p>`;
+              }
+            });
+            popupContent += `</div>`;
+
+            L.popup()
+              .setLatLng(e.latlng)
+              .setContent(popupContent)
+              .openOn(map);
+          }
+        } catch (error) {
+          console.error('❌ Identify error:', error);
+        }
       };
 
-      try {
-        const proxyLayer = createProxyLayer();
-        proxyLayer.addTo(map);
-        setCurrentLayer(proxyLayer);
+      clickHandlerRef.current = handleMapClick;
+      map.on('click', handleMapClick);
 
-        console.log('✅ ArcGIS layer added via proxy');
-
-        // Add click handler for identification
-        const handleMapClick = async (e) => {
-          try {
-            const mapSize = map.getSize();
-            const bounds = map.getBounds();
-            
-            const identifyParams = {
-              geometry: `${e.latlng.lng},${e.latlng.lat}`,
-              geometryType: 'esriGeometryPoint',
-              layers: `visible:${layersToShow.join(',')}`,
-              tolerance: 3,
-              mapExtent: `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`,
-              imageDisplay: `${mapSize.x},${mapSize.y},96`,
-              sr: 4326
-            };
-
-            const results = await mapServerAPI.identify(identifyParams);
-            
-            if (results && results.results && results.results.length > 0) {
-              const feature = results.results[0];
-              const attributes = feature.attributes || {};
-              
-              let popupContent = `<div class="arcgis-popup">`;
-              if (feature.layerName) {
-                popupContent += `<h4>${feature.layerName}</h4>`;
-              }
-              
-              Object.entries(attributes).forEach(([key, value]) => {
-                if (value && key !== 'OBJECTID' && key !== 'Shape') {
-                  popupContent += `<p><strong>${key}:</strong> ${value}</p>`;
-                }
-              });
-              popupContent += `</div>`;
-
-              L.popup()
-                .setLatLng(e.latlng)
-                .setContent(popupContent)
-                .openOn(map);
-            }
-          } catch (error) {
-            console.error('❌ Identify error:', error);
-          }
-        };
-
-        map.on('click', handleMapClick);
-
-        return () => {
-          map.off('click', handleMapClick);
-          if (proxyLayer && map.hasLayer(proxyLayer)) {
-            map.removeLayer(proxyLayer);
-          }
-        };
-
-      } catch (error) {
-        console.error('❌ Error creating proxy layer:', error);
-      }
+    } catch (error) {
+      console.error('❌ Error creating MapServer layer:', error);
     }
-  }, [map, layersToShow, currentLayer, options]);
+
+    // Cleanup function
+    return () => {
+      if (clickHandlerRef.current) {
+        map.off('click', clickHandlerRef.current);
+      }
+      if (currentLayerRef.current && map.hasLayer(currentLayerRef.current)) {
+        map.removeLayer(currentLayerRef.current);
+      }
+    };
+  }, [map, layersToShow, options.opacity]);
 
   return null;
 };
@@ -227,7 +272,6 @@ const VehicleMarkers = ({ vehicles, statusFilter = [] }) => {
   );
 };
 
-// --- UPDATED: Enhanced error handling for Tpapps component ---
 const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) => {
   const [vehicles, setVehicles] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -267,10 +311,8 @@ const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) =>
       }
     };
 
-    // Initial fetch
     fetchData();
 
-    // Set up interval only if component is still mounted
     if (isMounted) {
       intervalId = setInterval(() => {
         if (isMounted) {
@@ -285,15 +327,13 @@ const TpappsVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) =>
         clearInterval(intervalId);
       }
     };
-  }, [isEnabled]); // Add isEnabled to dependencies
+  }, [isEnabled, onDataLoad, onError]);
 
-  // Always render the component once initialized, but only show markers if enabled and no error
   return isInitialized ? (
     (isEnabled && !hasError) ? <VehicleMarkers vehicles={vehicles} statusFilter={statusFilter} /> : null
   ) : null;
 };
 
-// --- Dikshank component (Proxy server call) ---
 const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) => {
   const [vehicles, setVehicles] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -330,7 +370,6 @@ const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) 
           setHasError(true);
           setIsInitialized(true);
           
-          // Handle different types of errors
           let errorMessage = err.message;
           if (err.message.toLowerCase().includes('backend api failed')) {
             errorMessage = 'Backend proxy server error - Check if backend is running';
@@ -346,16 +385,14 @@ const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) 
       }
     };
 
-    // Initial fetch
     fetchData();
 
-    // Set up interval for periodic updates
     if (isMounted) {
       intervalId = setInterval(() => {
         if (isMounted) {
           fetchData();
         }
-      }, 30000); // 30 seconds
+      }, 30000);
     }
 
     return () => {
@@ -364,7 +401,7 @@ const DikshankVehicleLayer = ({ onDataLoad, onError, isEnabled, statusFilter }) 
         clearInterval(intervalId);
       }
     };
-  }, [onDataLoad, onError, isEnabled]); // Add isEnabled to dependencies
+  }, [isEnabled, onDataLoad, onError]);
 
   return isInitialized ? (
     (isEnabled && !hasError) ? <VehicleMarkers vehicles={vehicles} statusFilter={statusFilter} /> : null
@@ -467,27 +504,28 @@ const ApiControl = ({ apiStates, onApiToggle }) => {
   );
 };
 
-// --- UPDATED: Main Kanpur Map component with layer controls and API toggles ---
+// Main Kanpur Map component
 export default function KanpurMap() {
   const { layers: layersFromParams } = useParams();
   const navigate = useNavigate();
   const kanpurPosition = [26.4499, 80.3319];
   
-  const kanpurServiceUrl = config.arcGisServiceUrl;
-
   const [layers, setLayers] = useState([]);
-  const [apiStatus, setApiStatus] = useState({}); // Track status of each API
+  const [apiStatus, setApiStatus] = useState({});
   const [errors, setErrors] = useState([]);
   const [apiStates, setApiStates] = useState({
     tpapps: true,
     dikshank: true
   });
-  const [selectedStatuses, setSelectedStatuses] = useState([]); // Empty array means show all
-  const [allVehicles, setAllVehicles] = useState({ tpapps: [], dikshank: [] }); // Store all vehicles
+  const [selectedStatuses, setSelectedStatuses] = useState([]);
+  const [allVehicles, setAllVehicles] = useState({ tpapps: [], dikshank: [] });
   const [vehicleStatusCounts, setVehicleStatusCounts] = useState({});
 
   useEffect(() => {
-    console.log('Configuration loaded:', config);
+    console.log('🔧 Configuration loaded:');
+    console.log('  - MapServer Mode:', config.mapServerMode);
+    console.log('  - ArcGIS Service URL:', config.arcGisServiceUrl);
+    console.log('  - API Base URL:', config.API_BASE_URL);
 
     const layersToShow = layersFromParams ? layersFromParams.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id)) : [];
     setLayers(layersToShow.length > 0 ? layersToShow : [55, 57]);
@@ -528,25 +566,22 @@ export default function KanpurMap() {
       }
     }));
 
-    // Store vehicles for filtering
     if (data.vehicles) {
       setAllVehicles(prev => ({
         ...prev,
         [data.source]: data.vehicles
       }));
     }
-  }, []);
+  }, []); // Empty dependency array - function doesn't depend on external values
 
   const handleError = useCallback((errorMsg) => {
-    // Keep only the latest error for each API to avoid spam
     setErrors(prev => {
       const apiName = errorMsg.split(':')[0];
       const filteredErrors = prev.filter(e => !e.startsWith(apiName));
       return [...filteredErrors, errorMsg];
     });
-  }, []);
+  }, []); // Empty dependency array - function doesn't depend on external values
   
-  // Calculate total vehicles only from successful APIs
   const totalVehicles = Object.values(apiStatus)
     .filter(status => status.status === 'success')
     .reduce((sum, status) => sum + status.count, 0);
@@ -575,6 +610,9 @@ export default function KanpurMap() {
                 return layer ? `${layer.name} (${id})` : id;
               }).join(', ') : 'None'}
             </p>
+            <p className="text-xs text-green-200">
+              MapServer Mode: {config.mapServerMode === 'direct' ? '🔗 Direct' : '🔄 Proxy'}
+            </p>
             {successfulApis.length > 0 && (
               <p className="text-xs text-green-200">
                 Active APIs: {successfulApis.join(', ')}
@@ -596,7 +634,6 @@ export default function KanpurMap() {
           </div>
         </div>
 
-        {/* Controls Row */}
         <div className="flex gap-4 items-center">
           <LayerControl selectedLayers={layers} onLayerChange={handleLayerChange} />
           <StatusFilter 
@@ -627,7 +664,6 @@ export default function KanpurMap() {
           <TileLayer attribution='&copy; OpenStreetMap contributors & Esri' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {layers.length > 0 && <ArcGISLayerGroup layersToShow={layers} options={{ opacity: 0.8 }} />}
           
-          {/* These components will now handle their own errors gracefully and can be toggled */}
           <TpappsVehicleLayer 
             onDataLoad={handleDataLoad} 
             onError={handleError} 
@@ -640,7 +676,6 @@ export default function KanpurMap() {
             isEnabled={apiStates.dikshank}
             statusFilter={selectedStatuses}
           />
-
         </MapContainer>
       </div>
     </div>
