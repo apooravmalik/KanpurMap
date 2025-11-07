@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css';
 import * as EsriLeaflet from 'esri-leaflet';
 import { fetchTpappsData } from '../utils/tpappsAPI';
 import { fetchDikshankData } from '../utils/dikshankAPI';
+import { mapServerAPI } from '../utils/mapServerAPI.js';
 import { config } from '../config/config.js';
 import StatusFilter from './statusFilter';
 import { getStatusColor } from './statusConstants';
@@ -79,24 +80,99 @@ const LAYER_DEFINITIONS = [
 ];
 
 // --- CHILD COMPONENTS (No changes here) ---
-const ArcGISLayerGroup = ({ url, layersToShow, options }) => {
+const ArcGISLayerGroup = ({ layersToShow, options = {} }) => {
   const map = useMap();
+  const [currentLayer, setCurrentLayer] = useState(null);
+
   useEffect(() => {
-    let esriLayer;
     if (map && layersToShow && layersToShow.length > 0) {
-      esriLayer = EsriLeaflet.dynamicMapLayer({ url, layers: layersToShow, ...options }).addTo(map);
-      const handleMapClick = (e) => {
-        esriLayer.identify().at(e.latlng).layers('visible:' + layersToShow.join(',')).run((error, featureCollection) => {
-          if (error || !featureCollection.features.length) return;
-          const feature = featureCollection.features[0];
-          const popupContent = `<strong>${feature.properties.Layer}:</strong> ${feature.properties[feature.layer.displayField] || 'N/A'}`;
-          L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
+      // Remove existing layer
+      if (currentLayer && map.hasLayer(currentLayer)) {
+        map.removeLayer(currentLayer);
+      }
+
+      // Create custom tile layer that forces proxy usage
+      const createProxyLayer = () => {
+        return L.tileLayer.wms(`${config.API_BASE_URL}/api/arcgis/export`, {
+          layers: layersToShow.join(','),
+          format: 'image/png',
+          transparent: true,
+          version: '1.1.1',
+          attribution: 'ArcGIS Data via Proxy',
+          opacity: options.opacity || 0.8,
+          // Force the layer to use our proxy endpoint
+          tileSize: 512,
+          zoomOffset: -1,
+          ...options
         });
       };
-      map.on('click', handleMapClick);
-      return () => { map.off('click', handleMapClick); if (map.hasLayer(esriLayer)) { map.removeLayer(esriLayer); } };
+
+      try {
+        const proxyLayer = createProxyLayer();
+        proxyLayer.addTo(map);
+        setCurrentLayer(proxyLayer);
+
+        console.log('✅ ArcGIS layer added via proxy');
+
+        // Add click handler for identification
+        const handleMapClick = async (e) => {
+          try {
+            const mapSize = map.getSize();
+            const bounds = map.getBounds();
+            
+            const identifyParams = {
+              geometry: `${e.latlng.lng},${e.latlng.lat}`,
+              geometryType: 'esriGeometryPoint',
+              layers: `visible:${layersToShow.join(',')}`,
+              tolerance: 3,
+              mapExtent: `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`,
+              imageDisplay: `${mapSize.x},${mapSize.y},96`,
+              sr: 4326
+            };
+
+            const results = await mapServerAPI.identify(identifyParams);
+            
+            if (results && results.results && results.results.length > 0) {
+              const feature = results.results[0];
+              const attributes = feature.attributes || {};
+              
+              let popupContent = `<div class="arcgis-popup">`;
+              if (feature.layerName) {
+                popupContent += `<h4>${feature.layerName}</h4>`;
+              }
+              
+              Object.entries(attributes).forEach(([key, value]) => {
+                if (value && key !== 'OBJECTID' && key !== 'Shape') {
+                  popupContent += `<p><strong>${key}:</strong> ${value}</p>`;
+                }
+              });
+              popupContent += `</div>`;
+
+              L.popup()
+                .setLatLng(e.latlng)
+                .setContent(popupContent)
+                .openOn(map);
+            }
+          } catch (error) {
+            console.error('❌ Identify error:', error);
+          }
+        };
+
+        map.on('click', handleMapClick);
+
+        return () => {
+          map.off('click', handleMapClick);
+          if (proxyLayer && map.hasLayer(proxyLayer)) {
+            map.removeLayer(proxyLayer);
+          }
+        };
+
+      } catch (error) {
+        console.error('❌ Error creating proxy layer:', error);
+      }
     }
-  }, [map, url, layersToShow, options]);
+  }, [map, layersToShow, currentLayer, options]);
+
   return null;
 };
 
@@ -549,7 +625,7 @@ export default function KanpurMap() {
       <div className="flex-1 relative">
         <MapContainer center={kanpurPosition} zoom={12} className="h-full w-full">
           <TileLayer attribution='&copy; OpenStreetMap contributors & Esri' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          {layers.length > 0 && <ArcGISLayerGroup url={kanpurServiceUrl} layersToShow={layers} options={{ opacity: 0.8 }} />}
+          {layers.length > 0 && <ArcGISLayerGroup layersToShow={layers} options={{ opacity: 0.8 }} />}
           
           {/* These components will now handle their own errors gracefully and can be toggled */}
           <TpappsVehicleLayer 

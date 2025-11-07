@@ -17,7 +17,8 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     apis_configured: {
       tpapps: !!config.TPAPPS_API_URL,
-      dikshank: !!config.DIKSHANK_API_URL
+      dikshank: !!config.DIKSHANK_API_URL,
+      arcgis_mapserver: !!config.MAPSERVER_URL
     },
   });
 });

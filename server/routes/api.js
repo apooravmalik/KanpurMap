@@ -88,4 +88,54 @@ router.get('/dikshank/vehicles', async (req, res) => {
   }
 });
 
+// ArcGIS Proxy Route - handles dynamic paths after /arcgis/
+router.get('/arcgis/*', async (req, res) => {
+  try {
+    // Extract the dynamic path after '/arcgis/'
+    const dynamicPath = req.params[0]; // This captures everything after '/arcgis/'
+    const queryString = new URLSearchParams(req.query).toString();
+    
+    // Construct the full URL using your environment variable
+    const baseUrl = config.MAPSERVER_URL || '';
+    const fullUrl = `${baseUrl}${dynamicPath}${queryString ? `?${queryString}` : ''}`;
+    
+    console.log('🗺️ Proxying ArcGIS request to:', fullUrl);
+
+    const response = await fetch(fullUrl, {
+      method: req.method,
+      agent: httpsAgent, // Reuse your existing HTTPS agent
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Node.js Proxy Server'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`ArcGIS API failed: HTTP status ${response.status}`);
+    }
+
+    // Handle different response types (JSON or binary data like images)
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      const data = await response.json();
+      res.json(data);
+    } else {
+      // For image responses or other binary data
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      res.set('Content-Type', contentType);
+      res.send(buffer);
+    }
+
+  } catch (error) {
+    console.error('❌ ArcGIS API Error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch ArcGIS data',
+      message: error.message,
+      source: 'arcgis'
+    });
+  }
+});
+
 export default router;
